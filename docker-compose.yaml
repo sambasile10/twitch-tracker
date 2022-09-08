@@ -1,0 +1,12 @@
+services:
+  tracker:
+    container_name: tracker
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    restart: on-failure
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/usr/share/tracker/

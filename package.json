@@ -1,0 +1,15 @@
+{
+  "devDependencies": {
+    "@types/lodash": "^4.14.184",
+    "typescript": "^4.8.2"
+  },
+  "dependencies": {
+    "@types/node": "^18.7.16",
+    "axios": "^0.27.2",
+    "fs-extra": "^10.1.0",
+    "lodash": "^4.17.21",
+    "pg-promise": "^10.11.1",
+    "queue-typescript": "^1.0.1",
+    "tslog": "^3.3.4"
+  }
+}
