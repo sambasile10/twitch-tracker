@@ -1,15 +1,16 @@
 import { Queue } from 'queue-typescript';
 import { Config } from './config';
 import axios from 'axios';
-import { Logger } from 'tslog';
+import { ISettingsParam, Logger } from 'tslog';
 import { ChattersData } from './database';
+import { TSLOG_OPTIONS } from './main';
 
 // Fetch data for each channel every x seconds
 const FETCH_CHANNEL_INTERVAL: number = (Number(process.env.FETCH_INTERVAL) || 30);
 
 export class Scraper {
 
-    private log: Logger = new Logger({ name: 'Scraper' });
+    private log: Logger = new Logger({ name: 'Scraper', ...TSLOG_OPTIONS } as ISettingsParam);
     private queue: Queue<string>;
 
     private dbCallback: (data: ChattersData) => void;
@@ -43,15 +44,18 @@ export class Scraper {
         });
     }
 
-    private startCollection(): void {
+    public startCollection(): void {
         const num_channels: number = Config.config.channels.length;
         const interval: number = (FETCH_CHANNEL_INTERVAL / num_channels) * 1000;
         this.queue = new Queue<string>(...Config.config.channels);
+        this.log.info(`Queue length is ${this.queue.length}`);
 
         this.log.info(`Fetching data for ${num_channels} channels every ${FETCH_CHANNEL_INTERVAL} seconds. Interval of ${interval} ms.`);
         this.collectionRunner = setInterval(() => {
+            this.log.info(`Queue: ${this.queue.length}`);
             if(this.queue.length === 0) {
                 // Queue is empty
+                this.log.warn(`Calling for database flush`);
                 this.notifyEndOfQueue();
                 this.stopCollection();
             }

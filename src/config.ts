@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import { exit } from "process";
-import { Logger } from "tslog";
+import { ISettingsParam, Logger } from "tslog";
+import { TSLOG_OPTIONS, scraper } from "./main";
 
 export declare interface ConfigData {
     channels: string[] // Channels to be tracked
@@ -10,7 +11,7 @@ const CONFIG_PATH = process.env.CONFIG_PATH || String(__dirname+'/config/config.
 
 export class Config {
 
-    private log: Logger = new Logger({ name: 'Config' });
+    private log: Logger = new Logger({ name: 'Config', ...TSLOG_OPTIONS } as ISettingsParam);
 
     public static config: ConfigData;
 
