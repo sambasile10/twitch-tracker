@@ -1,12 +1,12 @@
 import * as fs from "fs";
-import { config } from "process";
+import { exit } from "process";
 import { Logger } from "tslog";
 
 export declare interface ConfigData {
     channels: string[] // Channels to be tracked
 }
 
-const CONFIG_PATH = process.env.CONFIG_PATH || String(__dirname+'/config.json');
+const CONFIG_PATH = process.env.CONFIG_PATH || String(__dirname+'/config/config.json');
 
 export class Config {
 
@@ -14,9 +14,16 @@ export class Config {
 
     public static config: ConfigData;
 
-    constructor() {}
+    constructor() {
+        this.loadConfig();
+    }
 
     private loadConfig(): number {
+        if(!fs.existsSync(CONFIG_PATH)) {
+            this.log.fatal(`Config file does not exist. Path: ${CONFIG_PATH}`);
+            exit(255);
+        }
+
         let rawText = fs.readFileSync(CONFIG_PATH).toString();
         Config.config = JSON.parse(rawText) as ConfigData;
         this.log.debug(`Read config file '${CONFIG_PATH}'.`);

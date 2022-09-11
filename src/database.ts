@@ -37,8 +37,8 @@ interface IExtensions {
 
 const options: pgPromise.IInitOptions<IExtensions> = {
     extend(obj) {
-        obj.createChannel = (channel) => {
-            return obj.none(`CREATE TABLE IF NOT EXISTS ${channel.toLowerCase()} ( id SERIAL, channel_name VARCHAR(50), timestamp NOT NULL, overlap_count INTEGER, total_chatters INTEGER, PRIMARY KEY(id) );`);
+        obj.createChannel = (channel: string) => {
+            return obj.none(`CREATE TABLE IF NOT EXISTS ${channel.toLowerCase()} ( id SERIAL, channel_name VARCHAR(50), timestamp TIMESTAMP NOT NULL, overlap_count INTEGER, total_chatters INTEGER, PRIMARY KEY(id) );`);
         }
     }
 };
@@ -79,6 +79,9 @@ export class Database {
             await this.addChannel(channel);
         }
 
+        // Clear temp folder
+        fsExtra.emptyDirSync(OUTPUT_PATH);
+
         this.log.info(`Initialized Database.`);
     }
 
@@ -100,7 +103,7 @@ export class Database {
         }
 
         // Delete temporary files
-        // TODO: Use fs-extra
+        fsExtra.emptyDirSync(OUTPUT_PATH);
     }
 
     private async flushChannel(channel: string, overlaps: [string, number][], total_chatters: number, timestamp: number): Promise<void> {
@@ -129,8 +132,9 @@ export class Database {
     async addChannel(channel: string): Promise<void> {
         return new Promise<void>((resolve, reject) => {
             const table_name: string = channel.toLowerCase();
-            this.db.createChannel().then(res => {
+            this.db.createChannel(table_name).then(res => {
                 this.columnSets.set(table_name, new this.pgp.helpers.ColumnSet(['channel_name', 'timestamp', 'overlap_count', 'total_chatters'], { table: table_name }));
+                this.log.debug(`Added table "${table_name}" to database.`);
                 resolve();
             }).catch(err => {
                 this.log.error(`Failed to create table for channel '${channel}'.`);
@@ -142,7 +146,7 @@ export class Database {
     // Writes list of chatters to a local file to be compared with others at once
     public async writeChatters(data: ChattersData): Promise<void> {
         return new Promise<void>((resolve, reject) => {
-            fs.writeFile(path.join(...[ OUTPUT_PATH, `${data.channel.toLowerCase}.json` ]), JSON.stringify(data), (err) => {
+            fs.writeFile(path.join(...[ OUTPUT_PATH, `${data.channel.toLowerCase()}.json` ]), JSON.stringify(data), (err) => {
                 this.channel_iteration++; // TODO: Call calculation functions when all channels have been recorded 
                 if(err) {
                     this.log.warn(`Failed to write chatter data for ${data.channel}. Error: ${err}`);

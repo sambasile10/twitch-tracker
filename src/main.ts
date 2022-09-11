@@ -1,9 +1,19 @@
+import { config } from "process";
+import { Config } from "./config";
 import { Database } from "./database";
 import { Scraper } from "./scraper";
 
-let scraper: Scraper = new Scraper();
-let database: Database = new Database();
+let configloader: Config = new Config();
 
-scraper.getChattersForChannel('saruei').then(chatters => console.log(chatters));
+let database: Database = new Database();
+database.init();
+
+let scraper: Scraper = new Scraper();
+
+
+scraper.start(database.writeChatters.bind(database),
+              database.flushOverlaps.bind(database));
+
+//scraper.getChattersForChannel('saruei').then(chatters => console.log(chatters));
 
 

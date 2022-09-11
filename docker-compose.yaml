@@ -4,9 +4,20 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    depends_on:
+      - db
     env_file: .env
-    restart: on-failure
     ports:
       - "8080:8080"
     volumes:
-      - ./config:/usr/share/tracker/
+      - ./config:/usr/share/tracker/config
+      - ./chatters:/usr/share/tracker/chatters
+  db:
+    image: "postgres"
+    env_file: .env
+    restart: on-failure
+    volumes:
+      - tracker_db:/var/lib/postgresql/data/
+
+volumes:
+  tracker_db: {}
