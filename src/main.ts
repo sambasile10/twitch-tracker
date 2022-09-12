@@ -17,15 +17,16 @@ let database: Database = new Database();
 database.init();
 
 let api: TwitchAPI = new TwitchAPI();
-api.checkAPIConnection(true).then(alive => { if(!alive) exit(1); });
+//api.checkAPIConnection(true).then(alive => { if(!alive) exit(1); });
 
 let scraper: Scraper = new Scraper();
 
+start();
 
-scraper.start(database.writeChatters.bind(database),
+function start() {
+    scraper.start(database.writeChatters.bind(database),
               database.flushOverlaps.bind(database));
-
-//scraper.getChattersForChannel('saruei').then(chatters => console.log(chatters));
+}
 
 export { scraper }
 

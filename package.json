@@ -8,6 +8,7 @@
     "axios": "^0.27.2",
     "fs-extra": "^10.1.0",
     "lodash": "^4.17.21",
+    "node-twitch": "^0.4.7",
     "pg-promise": "^10.11.1",
     "queue-typescript": "^1.0.1",
     "tslog": "^3.3.4"

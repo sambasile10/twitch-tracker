@@ -29,16 +29,16 @@ export declare interface DBUserInfoEntry {
     channel_name: string,
     channel_id: string,
     description: string,
-    broadcaster_type: number,
-    creation_date: string,
 }
 
-export declare interface DBBroadcastInfoEntry {
+export declare interface DBStreamInfoEntry {
     iteration: number,
     channel_name: string,
     category_name: string,
     category_id: string,
     title: string,
+    uptime: number,
+    viewer_count: number,
     language: string,
 }
 
@@ -62,7 +62,7 @@ const dev_dbConfig = {
 interface IExtensions {
     createChannel(channel: string): Promise<any>; // promise null?
     createUserInfoTable(): Promise<void>;
-    createBroadcastInfoTable(): Promise<void>;
+    createStreamInfoTable(): Promise<void>;
     createIterationsTable(): Promise<void>;
 };
 
@@ -71,16 +71,16 @@ const options: pgPromise.IInitOptions<IExtensions> = {
         obj.createChannel = (channel: string) => {
             return obj.none(`CREATE TABLE IF NOT EXISTS ${channel.toLowerCase()} (
                  id SERIAL, iteration INTEGER, channel_name VARCHAR(60), timestamp TIMESTAMP NOT NULL, 
-                 overlap_count NOT NULL INTEGER, total_chatters INTEGER, PRIMARY KEY(id) );`);
+                 overlap_count INTEGER NOT NULL, total_chatters INTEGER, PRIMARY KEY(id) );`);
         }
 
         obj.createUserInfoTable = () => {
-            return obj.none(`CREATE TABLE IF NOT EXISTS users (channel_name VARCHAR(26), channel_id NOT NULL VARCHAR(10),
-                 description TEXT, broadcaster_type SMALLINT, creation_date TIMESTAMP, PRIMARY KEY(channel_name) );`);
+            return obj.none(`CREATE TABLE IF NOT EXISTS users (channel_name VARCHAR(26), channel_id VARCHAR(10),
+                 description TEXT, PRIMARY KEY(channel_name) );`);
         }
 
-        obj.createBroadcastInfoTable = () => {
-            return obj.none(`CREATE TABLE IF NOT EXISTS broadcasts (id SERIAL, iteration INTEGER, channel_name VARCHAR(26), category_name VARCHAR(100),
+        obj.createStreamInfoTable = () => {
+            return obj.none(`CREATE TABLE IF NOT EXISTS streams (id SERIAL, iteration INTEGER, channel_name VARCHAR(26), category_name VARCHAR(100),
                  category_id VARCHAR(8), title VARCHAR(150), language VARCHAR(2), PRIMARY KEY(id) );`);
         }
 
@@ -120,12 +120,13 @@ export class Database {
 
         // Initializate auxillary databases
         await this.db.createUserInfoTable();
-        await this.db.createBroadcastInfoTable();
+        await this.db.createStreamInfoTable();
         await this.db.createIterationsTable();
+        this.log.debug(`Added tables: users, streams, iterations.`);
 
         // Add additional database column sets
         this.columnSets.set('_users_', new this.pgp.helpers.ColumnSet([ 'channel_name', 'channel_id', 'description', 'broadcaster_type', 'creation_date' ], { table: 'users' }));
-        this.columnSets.set('_broadcasts_', new this.pgp.helpers.ColumnSet([ 'iteration', 'channel_name', 'category_name', 'category_id', 'title', 'language' ], { table: 'broadcasts' }));
+        this.columnSets.set('_streams_', new this.pgp.helpers.ColumnSet([ 'iteration', 'channel_name', 'category_name', 'category_id', 'title', 'language' ], { table: 'streams' }));
         this.columnSets.set('_iterations_', new this.pgp.helpers.ColumnSet([ 'iteration', 'timestamp' ], { table: 'iterations' }));
 
         // Clear temp folder
@@ -146,13 +147,13 @@ export class Database {
         });
     }
 
-    public async flushBroadcastInfo(entries: DBBroadcastInfoEntry[]): Promise<void> {
+    public async flushStreamInfo(entries: DBStreamInfoEntry[]): Promise<void> {
         return new Promise<void>((resolve, reject) => {
-            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_broadcasts_'))).then(res => {
-                this.log.debug(`Successfully flushed ${entries.length} broadcast info entries to broadcasts database.`);
+            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_streams_'))).then(res => {
+                this.log.debug(`Successfully flushed ${entries.length} stream info entries to streams database.`);
                 resolve();
             }).catch(err => {
-                this.log.error(`Failed to flush broadcast info entries to database. Error: ${err}.`);
+                this.log.error(`Failed to flush stream info entries to database. Error: ${err}.`);
                 reject(err);
             });
         });

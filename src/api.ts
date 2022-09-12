@@ -2,17 +2,14 @@ import axios from 'axios';
 import { ISettingsParam, Logger } from 'tslog';
 import { TSLOG_OPTIONS } from './main';
 import { Secrets } from './secrets';
-
-/*
- *  Twitch API users endpoint response
- *  https://dev.twitch.tv/docs/api/reference/#get-users
- */ 
-declare interface GetUsersResponse {
-    data: UserData[]
-}
+import TwitchApi from 'node-twitch';
+import { APIStreamResponse } from 'node-twitch/dist/types/responses';
+import { Stream } from 'node-twitch/dist/types/objects';
+import { DBStreamInfoEntry, DBUserInfoEntry } from './database';
+import { currentIteration } from './globals';
 
 // Returned user data
-declare interface UserData {
+/* declare interface UserData {
     id: string, // User ID
     login?: string,
     display_name?: string,
@@ -24,100 +21,73 @@ declare interface UserData {
     view_count?: string,
     email?: string,
     created_at?: string
-};
-
-// Broadcast data
-declare interface BroadcastData {
-    broadcaster_id?: string,
-    broadcaster_login?: string,
-    broadcaster_name?: string,
-    broadcaster_language?: string,
-    game_id?: string,
-    game_name?: string,
-    title?: string,
-    delay?: number,
-}
+}; */
 
 export class TwitchAPI {
 
     private log: Logger = new Logger({ name: "TwitchAPI", ...TSLOG_OPTIONS } as ISettingsParam);
 
+    private twitch: TwitchApi;
     private secrets: Secrets;
 
     constuctor() {
+        //this.init();
+    }
+
+    public async init(): Promise<void> {
         this.secrets = new Secrets();
-    }
-
-    // Fetch broadcast data from a max of 100 usernames
-    async fetchBroadcastData(channels: string[]): Promise<BroadcastData[]> {
-        return new Promise<BroadcastData[]>((resolve, reject) => {
-            let config = { // Headers
-                headers: {
-                    'Authorization': `Bearer ${this.secrets.getSecrets().client_authorization}`,
-                    'Client-ID': `${this.secrets.getSecrets().client_id}`
-                }
-            };
-
-            // Construct URL
-            let url: string = "https://api.twitch.tv/helix/channels"
+        this.twitch = new TwitchApi({
+            client_id: this.secrets.getSecrets().client_id,
+            client_secret: this.secrets.getSecrets().client_secret,
+            access_token: this.secrets.getSecrets().client_authorization,
         });
     }
 
-    // Fetch user data from a given username
-    async fetchUserData(username: string, fetch_token: boolean): Promise<UserData> {
-        return new Promise<UserData>((resolve, reject) => {
-            let config = { // Headers
-                headers: {
-                    'Authorization': `Bearer ${this.secrets.getSecrets().client_authorization}`,
-                    'Client-ID': `${this.secrets.getSecrets().client_id}`
-                }
-            };
-
-            axios.get(
-                `https://api.twitch.tv/helix/users?login=${username}`,
-                config // Include config
-            ).then(res => {
-                // Cast GET response to our object, response is returned as array
-                let userData: UserData = (res.data!.data as GetUsersResponse)[0];
-                this.log.debug(`Fetched user data for '${username}' with user ID: '${userData.id}'`);
-                resolve(userData);
-            }).catch(err => {
-                // Handle fetch error, if the response status is 401 (unauthorized) then fetch a new bearer token
-                if(err.response) {
-                    this.log.error(`Failed to fetch user data for '${username}' with status: ${err.response!.status}.`);
-                } else {
-                    this.log.error(`Failed to fetch user data '${username}', the server did not give a response. (This likely means the user doesn't exist)`);
-                }
-
-                reject(err.response!.status || -1);
-            });
-        });
-    }
-
-    // Test API connection, returns true if connection works
-    async checkAPIConnection(retry_auth: boolean): Promise<boolean> {
-        return new Promise<boolean>((resolve, reject) => {
-            this.fetchUserData('twitch', true) // Try to get user data for 'twitch'
-            .then(res => {
-                // Successfully fetched data
-                this.log.info("Connected to Twitch API successfully.");
-                resolve(true);
-            }).catch(err => {
-                this.log.error("Failed to connect to Twitch API.");
-
-                if(retry_auth) {
-                    this.log.info("Fetching new authorization...");
-                    this.secrets.renewAuthorization().then(res => {
-                        this.log.info("Successfully fetched new authorization.");
-                        resolve(true);
-                    }).catch(err => {
-                        this.log.fatal("Failed to fetch new authorization");
-                        resolve(false);
+    public async getUserInfo(channels: string[]): Promise<DBUserInfoEntry[]> {
+        return new Promise<DBUserInfoEntry[]>((resolve, reject) => {
+            this.twitch.getUsers(channels).then(res => {
+                let entries: DBUserInfoEntry[] = [];
+                res.data.forEach(user => {
+                    entries.push({
+                        channel_name: user.login,
+                        channel_id: user.id,
+                        description: user.description,
                     })
-                } else {
-                    resolve(false);
-                }
-            });
+                });
+
+                this.log.debug(`Successfully fetched users data from API for ${entries.length} channels.`);
+                resolve(entries);
+            }).catch(err => {
+                this.log.error(`Failed to fetch users data from API. Error: ${err}.`);
+                reject(err);
+            })
+        });
+    }
+
+    public async getBroadcastInfo(channels: string[]): Promise<DBStreamInfoEntry[]> {
+        return new Promise<DBStreamInfoEntry[]>((resolve, reject) => {
+            this.twitch.getStreams({ channels: channels }).then(res => {
+                let entries: DBStreamInfoEntry[] = [];
+                let now: Date = new Date();
+                res.data.forEach(stream => {
+                    entries.push({
+                        iteration: currentIteration,
+                        channel_name: stream.user_login,
+                        category_name: stream.game_name,
+                        category_id: stream.game_id,
+                        title: stream.title,
+                        uptime: Math.round(Math.abs(now.getTime() - new Date(stream.started_at).getTime())),
+                        viewer_count: stream.viewer_count,
+                        language: stream.language,
+                    });
+                });
+
+                this.log.debug(`Successfully fetched stream data from API for ${entries.length} channels.`);
+                resolve(entries);
+            }).catch(err => {
+                this.log.error(`Failed to fetch stream data from API. Error: ${err}.`);
+                reject(err);
+            })
         });
     }
 
