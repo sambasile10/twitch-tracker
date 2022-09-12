@@ -37,12 +37,31 @@ const dev_dbConfig = {
 
 interface IExtensions {
     createChannel(channel: string): Promise<any>; // promise null?
+    createUserInfoTable(): Promise<void>;
+    createBroadcastInfoTable(): Promise<void>;
+    createIterationsTable(): Promise<void>;
 };
 
 const options: pgPromise.IInitOptions<IExtensions> = {
     extend(obj) {
         obj.createChannel = (channel: string) => {
-            return obj.none(`CREATE TABLE IF NOT EXISTS ${channel.toLowerCase()} ( id SERIAL, channel_name VARCHAR(50), timestamp TIMESTAMP NOT NULL , overlap_count INTEGER, total_chatters INTEGER, PRIMARY KEY(id) );`);
+            return obj.none(`CREATE TABLE IF NOT EXISTS ${channel.toLowerCase()} (
+                 id SERIAL, iteration INTEGER, channel_name VARCHAR(60), timestamp TIMESTAMP NOT NULL, 
+                 overlap_count NOT NULL INTEGER, total_chatters INTEGER, PRIMARY KEY(id) );`);
+        }
+
+        obj.createUserInfoTable = () => {
+            return obj.none(`CREATE TABLE IF NOT EXISTS user_info (channel_name VARCHAR(26), channel_id NOT NULL VARCHAR(10),
+                 description TEXT, broadcaster_type SMALLINT, creation_date TIMESTAMP, PRIMARY KEY(channel_name) );`);
+        }
+
+        obj.createBroadcastInfoTable = () => {
+            return obj.none(`CREATE TABLE IF NOT EXISTS broadcast_info (id SERIAL, iteration INTEGER, channel_name VARCHAR(26), category_name VARCHAR(100),
+                 category_id VARCHAR(8), title VARCHAR(150), language VARCHAR(2), PRIMARY KEY(id) );`);
+        }
+
+        obj.createIterationsTable = () => {
+            return obj.none(`CREATE TABLE IF NOT EXISTS (iteration INTEGER, timestamp TIMESTAMP NOT NULL, PRIMARY KEY(iteration) );`);
         }
     }
 };
@@ -74,6 +93,11 @@ export class Database {
         for await (const channel of Config.config.channels) {
             await this.addChannel(channel);
         }
+
+        // Initializate auxillary databases
+        await this.db.createUserInfoTable();
+        await this.db.createBroadcastInfoTable();
+        await this.db.createIterationsTable();
 
         // Clear temp folder
         fsExtra.emptyDirSync(OUTPUT_PATH);
