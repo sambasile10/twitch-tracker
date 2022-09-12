@@ -18,11 +18,35 @@ export declare interface ChattersData {
 }
 
 export declare interface DBOverlapEntry {
+    iteration: number,
     channel_name: string,
     timestamp: string,
     overlap_count: number,
     total_chatters: number,
 }
+
+export declare interface DBUserInfoEntry {
+    channel_name: string,
+    channel_id: string,
+    description: string,
+    broadcaster_type: number,
+    creation_date: string,
+}
+
+export declare interface DBBroadcastInfoEntry {
+    iteration: number,
+    channel_name: string,
+    category_name: string,
+    category_id: string,
+    title: string,
+    language: string,
+}
+
+export declare interface DBIterationEntry {
+    iteration: number,
+    timestamp: string,
+}
+
 
 const OUTPUT_PATH: string = process.env.OUTPUT_PATH || '/usr/share/tracker/chatters';
 
@@ -51,17 +75,17 @@ const options: pgPromise.IInitOptions<IExtensions> = {
         }
 
         obj.createUserInfoTable = () => {
-            return obj.none(`CREATE TABLE IF NOT EXISTS user_info (channel_name VARCHAR(26), channel_id NOT NULL VARCHAR(10),
+            return obj.none(`CREATE TABLE IF NOT EXISTS users (channel_name VARCHAR(26), channel_id NOT NULL VARCHAR(10),
                  description TEXT, broadcaster_type SMALLINT, creation_date TIMESTAMP, PRIMARY KEY(channel_name) );`);
         }
 
         obj.createBroadcastInfoTable = () => {
-            return obj.none(`CREATE TABLE IF NOT EXISTS broadcast_info (id SERIAL, iteration INTEGER, channel_name VARCHAR(26), category_name VARCHAR(100),
+            return obj.none(`CREATE TABLE IF NOT EXISTS broadcasts (id SERIAL, iteration INTEGER, channel_name VARCHAR(26), category_name VARCHAR(100),
                  category_id VARCHAR(8), title VARCHAR(150), language VARCHAR(2), PRIMARY KEY(id) );`);
         }
 
         obj.createIterationsTable = () => {
-            return obj.none(`CREATE TABLE IF NOT EXISTS (iteration INTEGER, timestamp TIMESTAMP NOT NULL, PRIMARY KEY(iteration) );`);
+            return obj.none(`CREATE TABLE IF NOT EXISTS iterations (iteration INTEGER, timestamp TIMESTAMP NOT NULL, PRIMARY KEY(iteration) );`);
         }
     }
 };
@@ -99,13 +123,53 @@ export class Database {
         await this.db.createBroadcastInfoTable();
         await this.db.createIterationsTable();
 
+        // Add additional database column sets
+        this.columnSets.set('_users_', new this.pgp.helpers.ColumnSet([ 'channel_name', 'channel_id', 'description', 'broadcaster_type', 'creation_date' ], { table: 'users' }));
+        this.columnSets.set('_broadcasts_', new this.pgp.helpers.ColumnSet([ 'iteration', 'channel_name', 'category_name', 'category_id', 'title', 'language' ], { table: 'broadcasts' }));
+        this.columnSets.set('_iterations_', new this.pgp.helpers.ColumnSet([ 'iteration', 'timestamp' ], { table: 'iterations' }));
+
         // Clear temp folder
         fsExtra.emptyDirSync(OUTPUT_PATH);
 
         this.log.info(`Initialized Database.`);
     }
 
-    // TODO: Flush overlaps to database
+    public async flushUserInfo(entries: DBUserInfoEntry[]): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_users_'))).then(res => {
+                this.log.debug(`Successfully flushed ${entries.length} user info entries to users database.`);
+                resolve();
+            }).catch(err => {
+                this.log.error(`Failed to flush user info entries to database. Error: ${err}.`);
+                reject(err);
+            });
+        });
+    }
+
+    public async flushBroadcastInfo(entries: DBBroadcastInfoEntry[]): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_broadcasts_'))).then(res => {
+                this.log.debug(`Successfully flushed ${entries.length} broadcast info entries to broadcasts database.`);
+                resolve();
+            }).catch(err => {
+                this.log.error(`Failed to flush broadcast info entries to database. Error: ${err}.`);
+                reject(err);
+            });
+        });
+    }
+
+    public async flushIterations(entries: DBIterationEntry[]): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_iterations_'))).then(res => {
+                this.log.debug(`Successfully flushed ${entries.length} broadcast iteration entries to iterations database.`);
+                resolve();
+            }).catch(err => {
+                this.log.error(`Failed to flush iteration info entries to database. Error: ${err}.`);
+                reject(err);
+            });
+        });
+    }
+
     public async flushOverlaps(): Promise<void> {
         /*
             1. Wait for results of calculateOverlaps()
@@ -135,12 +199,15 @@ export class Database {
             // Build database insertions
             const entries: DBOverlapEntry[] = [];
             for(const [channel_name, overlap_count] of overlaps) {
-                entries.push({
+                let entry: DBOverlapEntry = {
+                    iteration: Config.config.iteration,
                     channel_name: channel_name,
                     timestamp: timestamp,
                     overlap_count: overlap_count,
                     total_chatters: total_chatters,
-                } as DBOverlapEntry);
+                };
+
+                entries.push(entry);
             }
 
             const query = this.pgp.helpers.insert(entries, this.columnSets.get(channel.toLowerCase()));

@@ -69,19 +69,4 @@ export class Secrets {
         });
     }
 
-    // Test API connection, returns true if connection works
-    async checkAPIConnection(): Promise<boolean> {
-        return new Promise<boolean>((resolve, reject) => {
-            this.fetchUserData('twitch', true) // Try to get user data for 'twitch'
-            .then(res => {
-                // Successfully fetched data
-                this.log.info("Connected to Twitch API successfully.");
-                resolve(true);
-            }).catch(err => {
-                this.log.error("Failed to connect to Twitch API.");
-                resolve(false);
-            });
-        });
-    }
-
 }
