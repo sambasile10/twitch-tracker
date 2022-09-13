@@ -5,7 +5,9 @@ import { TSLOG_OPTIONS, scraper } from "./main";
 
 export declare interface ConfigData {
     channels: string[], // Channels to be tracked
-    iteration: number,
+    iteration?: number,
+    languages: string,
+    search_depth: number,
 }
 
 const CONFIG_PATH = process.env.CONFIG_PATH || String(__dirname+'/config/config.json');

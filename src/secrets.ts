@@ -19,10 +19,9 @@ export class Secrets {
     private secrets: APISecrets;
 
     constructor() {
-        this.init();
     }
 
-    public init(): void {
+    public async init(): Promise<void> {
         if(!fs.existsSync(SECRETS_PATH)) {
             this.log.fatal(`Secrets file does not exist. Path: ${SECRETS_PATH}`);
             exit(255);
@@ -31,6 +30,15 @@ export class Secrets {
         let rawText = fs.readFileSync(SECRETS_PATH).toString();
         this.secrets = JSON.parse(rawText) as APISecrets;
         this.log.debug(`Read secrets file '${SECRETS_PATH}'.`);
+
+        if(this.secrets.client_authorization === "") {
+            this.log.debug("No client authorization, fetching new token...");
+            try {
+                await this.renewAuthorization();
+            } catch (err) {
+                exit(1);
+            }
+        }
     }
 
     public getSecrets(): APISecrets {

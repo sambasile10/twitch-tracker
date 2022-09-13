@@ -7,21 +7,7 @@ import { APIStreamResponse } from 'node-twitch/dist/types/responses';
 import { Stream } from 'node-twitch/dist/types/objects';
 import { DBStreamInfoEntry, DBUserInfoEntry } from './database';
 import { currentIteration } from './globals';
-
-// Returned user data
-/* declare interface UserData {
-    id: string, // User ID
-    login?: string,
-    display_name?: string,
-    type?: string,
-    broadcaster_type?: string,
-    description?: string,
-    profile_image_url?: string,
-    offline_image_url?: string,
-    view_count?: string,
-    email?: string,
-    created_at?: string
-}; */
+import { Config } from './config';
 
 export class TwitchAPI {
 
@@ -36,11 +22,12 @@ export class TwitchAPI {
 
     public async init(): Promise<void> {
         this.secrets = new Secrets();
-        this.twitch = new TwitchApi({
+        await this.secrets.init();
+        /*this.twitch = new TwitchApi({
             client_id: this.secrets.getSecrets().client_id,
             client_secret: this.secrets.getSecrets().client_secret,
             access_token: this.secrets.getSecrets().client_authorization,
-        });
+        });*/
     }
 
     public async getUserInfo(channels: string[]): Promise<DBUserInfoEntry[]> {
@@ -64,7 +51,7 @@ export class TwitchAPI {
         });
     }
 
-    public async getBroadcastInfo(channels: string[]): Promise<DBStreamInfoEntry[]> {
+    public async getStreamInfo(channels: string[]): Promise<DBStreamInfoEntry[]> {
         return new Promise<DBStreamInfoEntry[]>((resolve, reject) => {
             this.twitch.getStreams({ channels: channels }).then(res => {
                 let entries: DBStreamInfoEntry[] = [];
@@ -90,6 +77,65 @@ export class TwitchAPI {
             })
         });
     }
+
+    public async fetchTopStreams(): Promise<DBStreamInfoEntry[]> {
+        let config = { // Headers
+            headers: {
+                'Authorization': `Bearer ${this.secrets.getSecrets().client_authorization}`,
+                'Client-ID': `${this.secrets.getSecrets().client_id}`
+            }
+        };
+
+        let now: Date = new Date();
+        let streams: DBStreamInfoEntry[] = [];
+        let pagination_token: string = "";
+        const max: number = Math.ceil(Config.config.search_depth / 100);
+        for (let i = 0; i < max; i++) {
+            if(pagination_token == "" && i > 0) return streams;
+
+            // Build API URL
+            let url_parts = [ "https://api.twitch.tv/helix/streams?first=100", `&language=${'en'}` ];
+            if(pagination_token != "") url_parts.push(`&after=${pagination_token}`);
+            const url = url_parts.join("");
+            console.log(url);
+            try {
+                const axios_response = await axios.get(url, config);
+                let data = axios_response.data!.data as any[];
+                for(let stream of data) {
+                    if(Number(stream.viewer_count) > 1000) {
+                        this.log.debug(`${stream.user_login} with ${stream.viewer_count} viewers.`);
+                        streams.push({
+                            iteration: currentIteration,
+                            channel_name: stream.user_login,
+                            category_name: stream.game_name,
+                            category_id: stream.game_id,
+                            title: stream.title,
+                            uptime: Math.round(Math.abs(now.getTime() - new Date(stream.started_at).getTime())),
+                            viewer_count: stream.viewer_count,
+                            language: stream.language,
+                        });
+                    }
+                }
+
+                this.log.debug(`So far we've found ${streams.length} channels with >1000 viewers. Position: ${i}/${max}, querying 100 each.`);
+                if(axios_response.data.pagination) {
+                    const cursor: string = axios_response.data.pagination!.cursor;
+                    pagination_token = cursor;
+                    this.log.debug(`Found new pagination token, advancing: ${pagination_token}.`);
+                } else {
+                    this.log.debug(`No pagination cursor found on: ${url}. Stopping search for streams.`);
+                    pagination_token = "";
+                    break;
+                }
+            } catch (err) {
+                this.log.error(`Failed to fetch top channels. URL: ${url}. Error: ${JSON.stringify(err)}.`);
+                return streams;
+            }
+        }
+
+        return streams;
+    }
+
 
 }
 

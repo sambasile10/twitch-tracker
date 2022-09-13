@@ -19,9 +19,16 @@ database.init();
 let api: TwitchAPI = new TwitchAPI();
 //api.checkAPIConnection(true).then(alive => { if(!alive) exit(1); });
 
+api.init().then(x => {
+    api.fetchTopStreams().then(streams => {
+        streams.forEach(stream => {});
+    });
+});
+
+
 let scraper: Scraper = new Scraper();
 
-start();
+//start();
 
 function start() {
     scraper.start(database.writeChatters.bind(database),
