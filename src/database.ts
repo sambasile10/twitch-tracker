@@ -47,7 +47,6 @@ export declare interface DBIterationEntry {
     timestamp: string,
 }
 
-
 const OUTPUT_PATH: string = process.env.OUTPUT_PATH || '/usr/share/tracker/chatters';
 
 // Postgres configuration for dev environment
@@ -99,8 +98,12 @@ export class Database {
     private db;
     private columnSets: Map<string, pgPromise.ColumnSet>;
 
+    // Channels already in user database
+    private registeredUsers: string[];
+
     constructor() {
         this.columnSets = new Map<string, pgPromise.ColumnSet>();
+        this.registeredUsers = [];
     }
 
     public async init(): Promise<void> {
@@ -129,6 +132,11 @@ export class Database {
         this.columnSets.set('_streams_', new this.pgp.helpers.ColumnSet([ 'iteration', 'channel_name', 'category_name', 'category_id', 'title', 'language' ], { table: 'streams' }));
         this.columnSets.set('_iterations_', new this.pgp.helpers.ColumnSet([ 'iteration', 'timestamp' ], { table: 'iterations' }));
 
+        // Load users from users database into map to avoid conflicts
+        const loaded_channels: string[] = await this.db.any(`SELECT channel_name FROM users;`);
+        this.registeredUsers = loaded_channels;
+        this.log.debug(`Loaded ${loaded_channels.length} users from users table into memory.`);
+
         // Clear temp folder
         fsExtra.emptyDirSync(OUTPUT_PATH);
 
@@ -137,7 +145,7 @@ export class Database {
 
     public async flushUserInfo(entries: DBUserInfoEntry[]): Promise<void> {
         return new Promise<void>((resolve, reject) => {
-            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_users_'))).then(res => {
+            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_users_')) + 'ON CONFLICT DO UPDATE').then(res => {
                 this.log.debug(`Successfully flushed ${entries.length} user info entries to users database.`);
                 resolve();
             }).catch(err => {

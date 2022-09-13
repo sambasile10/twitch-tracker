@@ -21,7 +21,7 @@ let api: TwitchAPI = new TwitchAPI();
 
 api.init().then(x => {
     api.fetchTopStreams().then(streams => {
-        streams.forEach(stream => {});
+        
     });
 });
 
@@ -31,8 +31,13 @@ let scraper: Scraper = new Scraper();
 //start();
 
 function start() {
-    scraper.start(database.writeChatters.bind(database),
+    scraper.init(database.writeChatters.bind(database),
               database.flushOverlaps.bind(database));
+}
+
+function performCollectionCycle() {
+    // Begin by fetching the top n streams with > 1000 viewers
+    
 }
 
 export { scraper }

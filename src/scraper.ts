@@ -21,10 +21,9 @@ export class Scraper {
         
     }
 
-    public start(writeChatters: (data: ChattersData) => void, flushChatters: () => void): void {
+    public init(writeChatters: (data: ChattersData) => void, flushChatters: () => void): void {
         this.dbCallback = writeChatters;
         this.notifyEndOfQueue = flushChatters;
-        this.startCollection();
     }
 
     public async getChattersForChannel(channel: string): Promise<ChattersData> {
