@@ -1,11 +1,10 @@
 import * as fs from "fs";
 import { exit } from "process";
 import { ISettingsParam, Logger } from "tslog";
-import { TSLOG_OPTIONS, scraper } from "./main";
+import { TSLOG_OPTIONS } from "./main";
 
 export declare interface ConfigData {
     channels: string[], // Channels to be tracked
-    iteration?: number,
     languages: string,
     search_depth: number,
 }

@@ -6,10 +6,10 @@ import { IConnectionParameters } from 'pg-promise/typescript/pg-subset';
 import { ISettingsParam, Logger } from 'tslog';
 import { Config } from './config';
 import * as fsExtra from "fs-extra";
-import { scraper, TSLOG_OPTIONS } from './main';
-import { calcOverlaps, currentTotalChatters } from './globals';
+import { TSLOG_OPTIONS, Main } from './main';
 import { channel } from 'diagnostics_channel';
 import { table } from 'console';
+import { reject } from 'lodash';
 
 export declare interface ChattersData {
     channel: string,
@@ -192,15 +192,16 @@ export class Database {
 
         // Write to database
         const timestamp = this.getDatabaseTimestamp();
-        let overlaps: Map<string, [string, number][]> = await calcOverlaps.calculateOverlaps();
+        let overlaps: Map<string, [string, number][]> = await Main.overlaps.calculateOverlaps();
         for await (const channel of overlaps.keys()) {
-            await this.flushChannel(channel, overlaps.get(channel), currentTotalChatters.get(channel), timestamp);
+            await this.flushChannel(channel, overlaps.get(channel), Main.currentTotalChatters.get(channel), timestamp);
         }
 
         // Delete temporary files
         fsExtra.emptyDirSync(OUTPUT_PATH);
-        currentTotalChatters.clear();
-        scraper.startCollection();
+        Main.currentTotalChatters.clear();
+
+        //Main.scraper.startCollection();
     }
 
     private async flushChannel(channel: string, overlaps: [string, number][], total_chatters: number, timestamp: string): Promise<void> {
@@ -209,7 +210,7 @@ export class Database {
             const entries: DBOverlapEntry[] = [];
             for(const [channel_name, overlap_count] of overlaps) {
                 let entry: DBOverlapEntry = {
-                    iteration: Config.config.iteration,
+                    iteration: Main.currentIteration,
                     channel_name: channel_name,
                     timestamp: timestamp,
                     overlap_count: overlap_count,
@@ -244,19 +245,48 @@ export class Database {
         });
     }
 
-    // Writes list of chatters to a local file to be compared with others at once
     public async writeChatters(data: ChattersData): Promise<void> {
-        return new Promise<void>((resolve, reject) => {
-            currentTotalChatters.set(data.channel, data.total_chatters);
-            fs.writeFile(path.join(...[ OUTPUT_PATH, `${data.channel.toLowerCase()}.json` ]), JSON.stringify(data), (err) => {
-                if(err) {
-                    this.log.warn(`Failed to write chatter data for ${data.channel}. Error: ${err}`);
-                    reject(err);
-                } else {
-                    this.log.debug(`Flushed chatter data for ${data.channel} to temporary file.`);
-                    resolve();
+        const output_file: string = path.join(...[ OUTPUT_PATH, `${data.channel.toLowerCase()}.json` ]);
+        const chatterFileExists: boolean = await this.fileExists(output_file);
+        let writeData: ChattersData;
+        if(chatterFileExists) {
+            this.log.debug(`File for ${data.channel} already exists, reading chatters.`);
+            // Load existing chatters from file
+            const rawText: string = (await fs.promises.readFile(output_file)).toString();
+            const oldData: ChattersData = JSON.parse(rawText) as ChattersData;
+
+            // Find union of chatters and update total chatters
+            const chattersUnion: string[] = _.union(oldData.chatters, data.chatters);
+            writeData = {
+                channel: data.channel,
+                total_chatters: chattersUnion.length,
+                chatters: chattersUnion,
+            } as ChattersData;
+        } else {
+            writeData = data;
+        }
+
+        // Write data
+        try {
+            await fs.promises.writeFile(output_file, JSON.stringify(writeData));
+        } catch (err) {
+            this.log.error(`Failed to write chatter data to file: ${err}`);
+        }
+        
+        Main.currentTotalChatters.set(writeData.channel, writeData.total_chatters);
+    }
+
+    // Returns a list of users not already in the users table for API to process
+    public async getUsersNotInDatabase(users: string[]): Promise<string[]> {
+        return new Promise<string[]>((resolve) => {
+            let users_not_stored: string[] = [];
+            for(const user in users) {
+                if(!this.registeredUsers.includes(user)) {
+                    users_not_stored.push(user);
                 }
-            });
+            }
+
+            resolve(users_not_stored);
         });
     }
 
@@ -264,6 +294,16 @@ export class Database {
         let now = new Date();
         now.setMinutes(Math.ceil(now.getMinutes() / 30) * 30);
         return now.toISOString().slice(0, 19).replace('T', ' ');
+    }
+
+    private async fileExists(file: string): Promise<boolean> {
+        try {
+            await fs.promises.access(OUTPUT_PATH);
+            return true;
+        } catch {
+            return false;
+        }
+        
     }
 
 }

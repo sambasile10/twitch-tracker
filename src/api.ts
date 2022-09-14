@@ -1,12 +1,11 @@
 import axios from 'axios';
 import { ISettingsParam, Logger } from 'tslog';
-import { TSLOG_OPTIONS } from './main';
+import { Main, TSLOG_OPTIONS } from './main';
 import { Secrets } from './secrets';
 import TwitchApi from 'node-twitch';
 import { APIStreamResponse } from 'node-twitch/dist/types/responses';
 import { Stream } from 'node-twitch/dist/types/objects';
 import { DBStreamInfoEntry, DBUserInfoEntry } from './database';
-import { currentIteration } from './globals';
 import { Config } from './config';
 
 export class TwitchAPI {
@@ -23,14 +22,14 @@ export class TwitchAPI {
     public async init(): Promise<void> {
         this.secrets = new Secrets();
         await this.secrets.init();
-        /*this.twitch = new TwitchApi({
+        this.twitch = new TwitchApi({
             client_id: this.secrets.getSecrets().client_id,
             client_secret: this.secrets.getSecrets().client_secret,
             access_token: this.secrets.getSecrets().client_authorization,
-        });*/
+        });
     }
 
-    public async getUserInfo(channels: string[]): Promise<DBUserInfoEntry[]> {
+    private async getUserInfo(channels: string[]): Promise<DBUserInfoEntry[]> {
         return new Promise<DBUserInfoEntry[]>((resolve, reject) => {
             this.twitch.getUsers(channels).then(res => {
                 let entries: DBUserInfoEntry[] = [];
@@ -58,7 +57,7 @@ export class TwitchAPI {
                 let now: Date = new Date();
                 res.data.forEach(stream => {
                     entries.push({
-                        iteration: currentIteration,
+                        iteration: Main.currentIteration,
                         channel_name: stream.user_login,
                         category_name: stream.game_name,
                         category_id: stream.game_id,
@@ -105,7 +104,7 @@ export class TwitchAPI {
                     if(Number(stream.viewer_count) > 1000) {
                         this.log.debug(`${stream.user_login} with ${stream.viewer_count} viewers.`);
                         streams.push({
-                            iteration: currentIteration,
+                            iteration: Main.currentIteration,
                             channel_name: stream.user_login,
                             category_name: stream.game_name,
                             category_id: stream.game_id,
@@ -134,6 +133,16 @@ export class TwitchAPI {
         }
 
         return streams;
+    }
+
+    private async storeUsersFromFetch(users: DBStreamInfoEntry[]): Promise<void> {
+        const users_not_stored: string[] = await Main.database.getUsersNotInDatabase(users.map(user => user.channel_name));
+        try {
+            const user_info: DBUserInfoEntry[] = await this.getUserInfo(users_not_stored);
+            await Main.database.flushUserInfo(user_info);
+        } catch (err) {
+            this.log.error(`Failed to store users from top streams fetch! Error: ${err}.`);
+        }
     }
 
 
