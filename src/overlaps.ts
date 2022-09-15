@@ -60,7 +60,7 @@ export class Overlaps {
             this.readChatterFile(other_channel).then(other_chatters => {
                 const overlap: number = _.intersection(chatters, other_chatters.chatters).length;
                 this.log.debug(`Found overlap of ${overlap} between ${channel} and ${other_channel}.`);
-                resolve([channel, overlap]);
+                resolve([other_channel, overlap]);
             }).catch(err => reject(err));
         });
     }

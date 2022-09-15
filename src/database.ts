@@ -20,7 +20,6 @@ export declare interface ChattersData {
 export declare interface DBOverlapEntry {
     iteration: number,
     channel_name: string,
-    timestamp: string,
     overlap_count: number,
     total_chatters: number,
 }
@@ -70,7 +69,7 @@ const options: pgPromise.IInitOptions<IExtensions> = {
     extend(obj) {
         obj.createChannel = (channel: string) => {
             return obj.none(`CREATE TABLE IF NOT EXISTS ${channel.toLowerCase()} (
-                 id SERIAL, iteration INTEGER, channel_name VARCHAR(26), timestamp TIMESTAMP NOT NULL, 
+                 id SERIAL, iteration INTEGER, channel_name VARCHAR(26), 
                  overlap_count INTEGER NOT NULL, total_chatters INTEGER, PRIMARY KEY(id) );`);
         }
 
@@ -143,8 +142,12 @@ export class Database {
     public async flushUserInfo(entries: DBUserInfoEntry[]): Promise<void> {
         return new Promise<void>((resolve, reject) => {
             this.log.debug(`Flushing user info of ${entries.length} entries.`);
-            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_users_')) + ' ON CONFLICT DO UPDATE').then(res => {
+            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_users_'))).then(res => {
                 this.log.debug(`Successfully flushed ${entries.length} user info entries to users database.`);
+                for(const channel of entries) {
+                    this.registeredUsers.push(channel.channel_name);
+                }
+
                 resolve();
             }).catch(err => {
                 this.log.error(`Failed to flush user info entries to database. Error: ${err}.`);
@@ -169,7 +172,7 @@ export class Database {
     public async flushIterations(entries: DBIterationEntry[]): Promise<void> {
         return new Promise<void>((resolve, reject) => {
             this.log.debug(`Flushing iterations info of ${entries.length} entries.`);
-            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_iterations_')) + ' ON CONFLICT DO UPDATE').then(res => {
+            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_iterations_'))).then(res => {
                 this.log.debug(`Successfully flushed ${entries.length} broadcast iteration entries to iterations database.`);
                 resolve();
             }).catch(err => {
@@ -222,7 +225,6 @@ export class Database {
                 let entry: DBOverlapEntry = {
                     iteration: Main.currentIteration,
                     channel_name: channel_name,
-                    timestamp: timestamp,
                     overlap_count: overlap_count,
                     total_chatters: total_chatters,
                 };
@@ -244,7 +246,7 @@ export class Database {
         return new Promise<void>((resolve, reject) => {
             const table_name: string = channel.toLowerCase();
             this.db.createChannel(table_name).then(res => {
-                let column: pgPromise.ColumnSet = new this.pgp.helpers.ColumnSet(['channel_name', 'timestamp', 'overlap_count', 'total_chatters'], { table: table_name });
+                let column: pgPromise.ColumnSet = new this.pgp.helpers.ColumnSet(['iteration', 'channel_name', 'overlap_count', 'total_chatters'], { table: table_name });
                 this.columnSets.set(table_name, column);
                 this.log.debug(`Added table "${table_name}" to database.`);
                 resolve();
@@ -279,6 +281,7 @@ export class Database {
         // Write data
         try {
             await fs.promises.writeFile(output_file, JSON.stringify(writeData));
+            this.log.debug(`Wrote ${writeData.total_chatters} chatters for channel ${writeData.channel} to temporary file`);
         } catch (err) {
             this.log.error(`Failed to write chatter data to file: ${err}`);
             throw Error(err);
@@ -293,7 +296,6 @@ export class Database {
             let users_not_stored: string[] = [];
             for(const user of users) {
                 if(!this.registeredUsers.includes(user)) {
-                    console.log(user);
                     users_not_stored.push(user);
                 }
             }

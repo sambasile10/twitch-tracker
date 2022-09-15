@@ -40,7 +40,7 @@ export class TwitchAPI {
             }
 
             const url: string = url_parts.join("");
-            console.log(url);
+            //console.log(url);
 
             axios.get(url, config).then(res => {
                 const data = res.data!.data as any[];
@@ -83,7 +83,10 @@ export class TwitchAPI {
         const max: number = Math.ceil(Config.config.search_depth / 100);
         this.log.debug(`Starting fetch of data max=${max}`);
         for (let i = 0; i < max; i++) {
-            if(pagination_token == "" && i > 0) return streams;
+            if(pagination_token == "" && i > 0) { // return streams;
+                let testing_only = streams.slice(0, 12);
+                return testing_only;
+            }; // TODO: REMOVE SLICE TESTING ONLY!!!!!
 
             // Build API URL
             let url_parts = [ "https://api.twitch.tv/helix/streams?first=100", `&language=${'en'}` ];
@@ -125,7 +128,7 @@ export class TwitchAPI {
             }
         }
 
-        return streams;
+        return streams.slice(0, 12); // TODO: CHANGE ME
     }
 
     public async storeUsersFromFetch(users: DBStreamInfoEntry[]): Promise<void> {
@@ -135,6 +138,11 @@ export class TwitchAPI {
         }
 
         const users_not_stored: string[] = await Main.database.getUsersNotInDatabase(user_names);
+        if(users_not_stored.length === 0) {
+            this.log.debug(`All users are stored in database, skipping user data fetch.`);
+            return;
+        }
+        
         this.log.debug(`${users_not_stored.length} users not in database, fetching data and flushing...`);
         try {
             // Split users array to chunks of 100 (max for twitch API at once)

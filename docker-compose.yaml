@@ -14,7 +14,7 @@ services:
       - ./config:/usr/share/tracker/config
       - ./chatters:/usr/share/tracker/chatters
   db:
-    image: "postgres"
+    image: "postgres:latest"
     env_file: .env
     restart: on-failure
     user: postgres
