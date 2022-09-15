@@ -47,7 +47,6 @@ export class Scraper {
 
         this.log.info(`Fetching data for ${num_channels} channels every ${FETCH_CHANNEL_INTERVAL} seconds. Interval of ${interval} ms.`);
         this.collectionRunner = setInterval(() => {
-            this.log.info(`Queue: ${this.queue.length}`);
             if(this.queue.length === 0) {
                 // Queue is empty
                 this.log.warn(`Calling for database flush`);
@@ -57,7 +56,7 @@ export class Scraper {
 
             let channel: string = this.queue.dequeue();
             this.getChattersForChannel(channel).then(data => {
-                this.log.debug(`Fetched ${data.total_chatters} chatters for ${channel}.`);
+                this.log.debug(`Fetched ${data.total_chatters} chatters for ${channel}. Position in Queue: ${this.queue.length}.`);
 
                 // Database callback
                 this.dbCallback(data);

@@ -14,7 +14,7 @@ import { reject } from 'lodash';
 export declare interface ChattersData {
     channel: string,
     total_chatters: number,
-    chatters: string[]
+    chatters: string[],
 }
 
 export declare interface DBOverlapEntry {
@@ -29,6 +29,7 @@ export declare interface DBUserInfoEntry {
     channel_name: string,
     channel_id: string,
     description: string,
+    creation_date: string,
 }
 
 export declare interface DBStreamInfoEntry {
@@ -75,12 +76,12 @@ const options: pgPromise.IInitOptions<IExtensions> = {
 
         obj.createUserInfoTable = () => {
             return obj.none(`CREATE TABLE IF NOT EXISTS users (channel_name VARCHAR(26), channel_id VARCHAR(12),
-                 description TEXT, PRIMARY KEY(channel_name) );`);
+                 description TEXT, creation_date TIMESTAMP, PRIMARY KEY(channel_name) );`);
         }
 
         obj.createStreamInfoTable = () => {
             return obj.none(`CREATE TABLE IF NOT EXISTS streams (id SERIAL, iteration INTEGER, channel_name VARCHAR(26), category_name VARCHAR(200),
-                 category_id VARCHAR(16), title VARCHAR(170), language VARCHAR(3), PRIMARY KEY(id) );`);
+                 category_id VARCHAR(20), title VARCHAR(170), language VARCHAR(3), PRIMARY KEY(id) );`);
         }
 
         obj.createIterationsTable = () => {
@@ -124,7 +125,7 @@ export class Database {
         this.log.debug(`Added tables: users, streams, iterations.`);
 
         // Add additional database column sets
-        this.columnSets.set('_users_', new this.pgp.helpers.ColumnSet([ 'channel_name', 'channel_id', 'description', 'broadcaster_type', 'creation_date' ], { table: 'users' }));
+        this.columnSets.set('_users_', new this.pgp.helpers.ColumnSet([ 'channel_name', 'channel_id', 'description', 'creation_date' ], { table: 'users' }));
         this.columnSets.set('_streams_', new this.pgp.helpers.ColumnSet([ 'iteration', 'channel_name', 'category_name', 'category_id', 'title', 'language' ], { table: 'streams' }));
         this.columnSets.set('_iterations_', new this.pgp.helpers.ColumnSet([ 'iteration', 'timestamp' ], { table: 'iterations' }));
 
@@ -142,7 +143,7 @@ export class Database {
     public async flushUserInfo(entries: DBUserInfoEntry[]): Promise<void> {
         return new Promise<void>((resolve, reject) => {
             this.log.debug(`Flushing user info of ${entries.length} entries.`);
-            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_users_')) + 'ON CONFLICT DO UPDATE').then(res => {
+            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_users_')) + ' ON CONFLICT DO UPDATE').then(res => {
                 this.log.debug(`Successfully flushed ${entries.length} user info entries to users database.`);
                 resolve();
             }).catch(err => {
@@ -168,7 +169,7 @@ export class Database {
     public async flushIterations(entries: DBIterationEntry[]): Promise<void> {
         return new Promise<void>((resolve, reject) => {
             this.log.debug(`Flushing iterations info of ${entries.length} entries.`);
-            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_iterations_'))).then(res => {
+            this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_iterations_')) + ' ON CONFLICT DO UPDATE').then(res => {
                 this.log.debug(`Successfully flushed ${entries.length} broadcast iteration entries to iterations database.`);
                 resolve();
             }).catch(err => {
@@ -256,7 +257,7 @@ export class Database {
 
     public async writeChatters(data: ChattersData): Promise<void> {
         const output_file: string = path.join(...[ OUTPUT_PATH, `${data.channel.toLowerCase()}.json` ]);
-        const chatterFileExists: boolean = await this.fileExists(output_file);
+        const chatterFileExists: boolean = this.fileExists(output_file);
         let writeData: ChattersData;
         if(chatterFileExists) {
             this.log.debug(`File for ${data.channel} already exists, reading chatters.`);
@@ -290,8 +291,9 @@ export class Database {
     public async getUsersNotInDatabase(users: string[]): Promise<string[]> {
         return new Promise<string[]>((resolve) => {
             let users_not_stored: string[] = [];
-            for(const user in users) {
+            for(const user of users) {
                 if(!this.registeredUsers.includes(user)) {
+                    console.log(user);
                     users_not_stored.push(user);
                 }
             }
@@ -316,14 +318,12 @@ export class Database {
         return now.toISOString().slice(0, 19).replace('T', ' ');
     }
 
-    private async fileExists(file: string): Promise<boolean> {
-        try {
-            await fs.promises.access(OUTPUT_PATH);
+    private fileExists(file: string): boolean {
+        if(fs.existsSync(file)) {
             return true;
-        } catch {
+        } else {
             return false;
         }
-        
     }
 
 }

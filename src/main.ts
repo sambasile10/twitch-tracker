@@ -73,7 +73,6 @@ export class Main {
 
             // Fetch top streams and write to database
             const top_streams: DBStreamInfoEntry[] = await Main.api.fetchTopStreams();
-            this.log.debug(`Reached trihard 7`);
             await Main.database.flushStreamInfo(top_streams);
 
             // Write user info to database

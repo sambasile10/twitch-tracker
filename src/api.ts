@@ -22,33 +22,7 @@ export class TwitchAPI {
     public async init(): Promise<void> {
         this.secrets = new Secrets();
         await this.secrets.init();
-        /*this.twitch = new TwitchApi({
-            client_id: this.secrets.getSecrets().client_id,
-            client_secret: this.secrets.getSecrets().client_secret,
-            access_token: this.secrets.getSecrets().client_authorization,
-        });*/
     }
-
-    /*private async getUserInfo(channels: string[]): Promise<DBUserInfoEntry[]> {
-        return new Promise<DBUserInfoEntry[]>((resolve, reject) => {
-            this.twitch.getUsers(channels).then(res => {
-                let entries: DBUserInfoEntry[] = [];
-                res.data.forEach(user => {
-                    entries.push({
-                        channel_name: user.login,
-                        channel_id: user.id,
-                        description: user.description,
-                    })
-                });
-
-                this.log.debug(`Successfully fetched users data from API for ${entries.length} channels.`);
-                resolve(entries);
-            }).catch(err => {
-                this.log.error(`Failed to fetch users data from API. Error: ${err}.`);
-                reject(err);
-            })
-        });
-    }*/
 
     private async getUserInfo(channels: string[]): Promise<DBUserInfoEntry[]> {
         return new Promise<DBUserInfoEntry[]>((resolve, reject) => {
@@ -61,9 +35,9 @@ export class TwitchAPI {
             
             // Build URL
             let url_parts: string[] = [ `https://api.twitch.tv/helix/users` ];
-            channels.forEach(channel => {
+            for(const channel of channels) {
                 url_parts.push(url_parts.length == 1 ? `?login=${channel}` : `&login=${channel}`);
-            });
+            }
 
             const url: string = url_parts.join("");
             console.log(url);
@@ -75,7 +49,8 @@ export class TwitchAPI {
                     userData.push({
                         channel_name: user.login,
                         channel_id: user.id,
-                        description: user.description
+                        description: user.description,
+                        creation_date: user.created_at,
                     } as DBUserInfoEntry);
                 }
 
@@ -92,33 +67,6 @@ export class TwitchAPI {
             });
         });
     }
-
-    /*public async getStreamInfo(channels: string[]): Promise<DBStreamInfoEntry[]> {
-        return new Promise<DBStreamInfoEntry[]>((resolve, reject) => {
-            this.twitch.getStreams({ channels: channels }).then(res => {
-                let entries: DBStreamInfoEntry[] = [];
-                let now: Date = new Date();
-                res.data.forEach(stream => {
-                    entries.push({
-                        iteration: Main.currentIteration,
-                        channel_name: stream.user_login,
-                        category_name: stream.game_name,
-                        category_id: stream.game_id,
-                        title: stream.title,
-                        uptime: Math.round(Math.abs(now.getTime() - new Date(stream.started_at).getTime())),
-                        viewer_count: stream.viewer_count,
-                        language: stream.language,
-                    });
-                });
-
-                this.log.debug(`Successfully fetched stream data from API for ${entries.length} channels.`);
-                resolve(entries);
-            }).catch(err => {
-                this.log.error(`Failed to fetch stream data from API. Error: ${err}.`);
-                reject(err);
-            })
-        });
-    }*/
 
     public async fetchTopStreams(): Promise<DBStreamInfoEntry[]> {
         this.log.info(`Fetching top streams from API...`);
@@ -141,13 +89,13 @@ export class TwitchAPI {
             let url_parts = [ "https://api.twitch.tv/helix/streams?first=100", `&language=${'en'}` ];
             if(pagination_token != "") url_parts.push(`&after=${pagination_token}`);
             const url = url_parts.join("");
-            console.log(url);
+            //this.log.debug(url);
             try {
                 const axios_response = await axios.get(url, config);
                 let data = axios_response.data!.data as any[];
                 for(let stream of data) {
                     if(Number(stream.viewer_count) > 1000) {
-                        this.log.debug(`${stream.user_login} with ${stream.viewer_count} viewers.`);
+                        //this.log.debug(`${stream.user_login} with ${stream.viewer_count} viewers.`);
                         streams.push({
                             iteration: Main.currentIteration,
                             channel_name: stream.user_login,
@@ -181,10 +129,25 @@ export class TwitchAPI {
     }
 
     public async storeUsersFromFetch(users: DBStreamInfoEntry[]): Promise<void> {
-        const users_not_stored: string[] = await Main.database.getUsersNotInDatabase(users.map(user => user.channel_name));
+        let user_names: string[]  = [];
+        for(const user of users) {
+            user_names.push(user.channel_name);
+        }
+
+        const users_not_stored: string[] = await Main.database.getUsersNotInDatabase(user_names);
         this.log.debug(`${users_not_stored.length} users not in database, fetching data and flushing...`);
         try {
-            const user_info: DBUserInfoEntry[] = await this.getUserInfo(users_not_stored);
+            // Split users array to chunks of 100 (max for twitch API at once)
+            let arrays = [];
+            while (users_not_stored.length > 0)
+                arrays.push(users_not_stored.splice(0, 100));
+
+            const user_info: DBUserInfoEntry[] = [];
+            for await(const users_chunk of arrays) {
+                const res: DBUserInfoEntry[] = await this.getUserInfo(users_chunk);
+                user_info.push(...res);
+            }
+
             await Main.database.flushUserInfo(user_info);
         } catch (err) {
             this.log.error(`Failed to store users from top streams fetch! Error: ${err}.`);
