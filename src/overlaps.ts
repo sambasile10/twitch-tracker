@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as _ from 'lodash';
 import { ISettingsParam, Logger } from 'tslog';
 import { Config } from './config';
-import { TSLOG_OPTIONS } from './main';
+import { Main, TSLOG_OPTIONS } from './main';
 import { ChattersData } from './database';
 
 const OUTPUT_PATH: string = process.env.OUTPUT_PATH || '/usr/share/tracker/chatters';
@@ -19,7 +19,7 @@ export class Overlaps {
     // Calculates overlaps for channels after each data collection period
     public async calculateOverlaps(): Promise<Map<string, [string, number][]>> {
         let overlaps = new Map<string, [string, number][]>();
-        for(const channel of Config.config.channels) {
+        for(const channel of Main.channels) {
             let channel_overlaps: [string, number][] = [];
             this.log.debug(`Calculating overlaps for ${channel}.`);
             try {
@@ -40,7 +40,7 @@ export class Overlaps {
             this.readChatterFile(channel).then(data => {
                 // Build Promise array
                 let promises: Promise<[string, number]>[] = [];
-                Config.config.channels.forEach((other_channel) => {
+                Main.channels.forEach((other_channel) => {
                     if(!(channel === other_channel)) {
                         promises.push(this.findOverlap(channel, data.chatters, other_channel));
                     }

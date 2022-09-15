@@ -4,9 +4,9 @@ import { ISettingsParam, Logger } from "tslog";
 import { TSLOG_OPTIONS } from "./main";
 
 export declare interface ConfigData {
-    channels: string[], // Channels to be tracked
-    languages: string,
-    search_depth: number,
+    languages: string, // Ignored for now
+    search_depth: number, // Number of channels to search in top streams (must be divisible by 100)
+    flush_every: number, // Flushes overlaps every x iterations (12 iterations = 6 hours)
 }
 
 const CONFIG_PATH = process.env.CONFIG_PATH || String(__dirname+'/config/config.json');
@@ -30,9 +30,6 @@ export class Config {
         let rawText = fs.readFileSync(CONFIG_PATH).toString();
         Config.config = JSON.parse(rawText) as ConfigData;
         this.log.debug(`Read config file '${CONFIG_PATH}'.`);
-        if(Config.config.channels) {
-            return Config.config.channels.length;
-        }
 
         return 0;
     }

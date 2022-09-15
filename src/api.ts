@@ -12,7 +12,7 @@ export class TwitchAPI {
 
     private log: Logger = new Logger({ name: "TwitchAPI", ...TSLOG_OPTIONS } as ISettingsParam);
 
-    private twitch: TwitchApi;
+    //private twitch: TwitchApi;
     private secrets: Secrets;
 
     constuctor() {
@@ -22,14 +22,14 @@ export class TwitchAPI {
     public async init(): Promise<void> {
         this.secrets = new Secrets();
         await this.secrets.init();
-        this.twitch = new TwitchApi({
+        /*this.twitch = new TwitchApi({
             client_id: this.secrets.getSecrets().client_id,
             client_secret: this.secrets.getSecrets().client_secret,
             access_token: this.secrets.getSecrets().client_authorization,
-        });
+        });*/
     }
 
-    private async getUserInfo(channels: string[]): Promise<DBUserInfoEntry[]> {
+    /*private async getUserInfo(channels: string[]): Promise<DBUserInfoEntry[]> {
         return new Promise<DBUserInfoEntry[]>((resolve, reject) => {
             this.twitch.getUsers(channels).then(res => {
                 let entries: DBUserInfoEntry[] = [];
@@ -48,9 +48,52 @@ export class TwitchAPI {
                 reject(err);
             })
         });
+    }*/
+
+    private async getUserInfo(channels: string[]): Promise<DBUserInfoEntry[]> {
+        return new Promise<DBUserInfoEntry[]>((resolve, reject) => {
+            let config = { // Headers
+                headers: {
+                    'Authorization': `Bearer ${this.secrets.getSecrets().client_authorization}`,
+                    'Client-ID': `${this.secrets.getSecrets().client_id}`
+                }
+            };
+            
+            // Build URL
+            let url_parts: string[] = [ `https://api.twitch.tv/helix/users` ];
+            channels.forEach(channel => {
+                url_parts.push(url_parts.length == 1 ? `?login=${channel}` : `&login=${channel}`);
+            });
+
+            const url: string = url_parts.join("");
+            console.log(url);
+
+            axios.get(url, config).then(res => {
+                const data = res.data!.data as any[];
+                let userData: DBUserInfoEntry[] = [];
+                for(const user of data) {
+                    userData.push({
+                        channel_name: user.login,
+                        channel_id: user.id,
+                        description: user.description
+                    } as DBUserInfoEntry);
+                }
+
+                resolve(userData);
+            }).catch(err => {
+                // Handle fetch error, if the response status is 401 (unauthorized) then fetch a new bearer token
+                if(err.response) {
+                    this.log.error(`Failed to fetch user data with status: ${err.response!.status}.`);
+                } else {
+                    this.log.error(`Failed to fetch user data, the server did not give a response. (This likely means the user doesn't exist)`);
+                }
+
+                reject(err.response);
+            });
+        });
     }
 
-    public async getStreamInfo(channels: string[]): Promise<DBStreamInfoEntry[]> {
+    /*public async getStreamInfo(channels: string[]): Promise<DBStreamInfoEntry[]> {
         return new Promise<DBStreamInfoEntry[]>((resolve, reject) => {
             this.twitch.getStreams({ channels: channels }).then(res => {
                 let entries: DBStreamInfoEntry[] = [];
@@ -75,9 +118,10 @@ export class TwitchAPI {
                 reject(err);
             })
         });
-    }
+    }*/
 
     public async fetchTopStreams(): Promise<DBStreamInfoEntry[]> {
+        this.log.info(`Fetching top streams from API...`);
         let config = { // Headers
             headers: {
                 'Authorization': `Bearer ${this.secrets.getSecrets().client_authorization}`,
@@ -89,6 +133,7 @@ export class TwitchAPI {
         let streams: DBStreamInfoEntry[] = [];
         let pagination_token: string = "";
         const max: number = Math.ceil(Config.config.search_depth / 100);
+        this.log.debug(`Starting fetch of data max=${max}`);
         for (let i = 0; i < max; i++) {
             if(pagination_token == "" && i > 0) return streams;
 
@@ -135,8 +180,9 @@ export class TwitchAPI {
         return streams;
     }
 
-    private async storeUsersFromFetch(users: DBStreamInfoEntry[]): Promise<void> {
+    public async storeUsersFromFetch(users: DBStreamInfoEntry[]): Promise<void> {
         const users_not_stored: string[] = await Main.database.getUsersNotInDatabase(users.map(user => user.channel_name));
+        this.log.debug(`${users_not_stored.length} users not in database, fetching data and flushing...`);
         try {
             const user_info: DBUserInfoEntry[] = await this.getUserInfo(users_not_stored);
             await Main.database.flushUserInfo(user_info);

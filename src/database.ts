@@ -69,18 +69,18 @@ const options: pgPromise.IInitOptions<IExtensions> = {
     extend(obj) {
         obj.createChannel = (channel: string) => {
             return obj.none(`CREATE TABLE IF NOT EXISTS ${channel.toLowerCase()} (
-                 id SERIAL, iteration INTEGER, channel_name VARCHAR(60), timestamp TIMESTAMP NOT NULL, 
+                 id SERIAL, iteration INTEGER, channel_name VARCHAR(26), timestamp TIMESTAMP NOT NULL, 
                  overlap_count INTEGER NOT NULL, total_chatters INTEGER, PRIMARY KEY(id) );`);
         }
 
         obj.createUserInfoTable = () => {
-            return obj.none(`CREATE TABLE IF NOT EXISTS users (channel_name VARCHAR(26), channel_id VARCHAR(10),
+            return obj.none(`CREATE TABLE IF NOT EXISTS users (channel_name VARCHAR(26), channel_id VARCHAR(12),
                  description TEXT, PRIMARY KEY(channel_name) );`);
         }
 
         obj.createStreamInfoTable = () => {
-            return obj.none(`CREATE TABLE IF NOT EXISTS streams (id SERIAL, iteration INTEGER, channel_name VARCHAR(26), category_name VARCHAR(100),
-                 category_id VARCHAR(8), title VARCHAR(150), language VARCHAR(2), PRIMARY KEY(id) );`);
+            return obj.none(`CREATE TABLE IF NOT EXISTS streams (id SERIAL, iteration INTEGER, channel_name VARCHAR(26), category_name VARCHAR(200),
+                 category_id VARCHAR(16), title VARCHAR(170), language VARCHAR(3), PRIMARY KEY(id) );`);
         }
 
         obj.createIterationsTable = () => {
@@ -117,10 +117,6 @@ export class Database {
 
         this.db = this.pgp(dbConfig as IConnectionParameters);
 
-        for await (const channel of Config.config.channels) {
-            await this.addChannel(channel);
-        }
-
         // Initializate auxillary databases
         await this.db.createUserInfoTable();
         await this.db.createStreamInfoTable();
@@ -145,6 +141,7 @@ export class Database {
 
     public async flushUserInfo(entries: DBUserInfoEntry[]): Promise<void> {
         return new Promise<void>((resolve, reject) => {
+            this.log.debug(`Flushing user info of ${entries.length} entries.`);
             this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_users_')) + 'ON CONFLICT DO UPDATE').then(res => {
                 this.log.debug(`Successfully flushed ${entries.length} user info entries to users database.`);
                 resolve();
@@ -157,6 +154,7 @@ export class Database {
 
     public async flushStreamInfo(entries: DBStreamInfoEntry[]): Promise<void> {
         return new Promise<void>((resolve, reject) => {
+            this.log.debug(`Flushing stream info of ${entries.length} entries.`);
             this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_streams_'))).then(res => {
                 this.log.debug(`Successfully flushed ${entries.length} stream info entries to streams database.`);
                 resolve();
@@ -169,6 +167,7 @@ export class Database {
 
     public async flushIterations(entries: DBIterationEntry[]): Promise<void> {
         return new Promise<void>((resolve, reject) => {
+            this.log.debug(`Flushing iterations info of ${entries.length} entries.`);
             this.db.none(this.pgp.helpers.insert(entries, this.columnSets.get('_iterations_'))).then(res => {
                 this.log.debug(`Successfully flushed ${entries.length} broadcast iteration entries to iterations database.`);
                 resolve();
@@ -188,20 +187,30 @@ export class Database {
             4. Reset channel iteration
         */
 
-            this.log.info("Calculating overlaps...");
+        this.log.info("Calculating overlaps...");
+
+        // Create tables for all channels if they don't exist
+        for await (const channel of Main.channels) {
+            await this.addChannel(channel);
+        }
 
         // Write to database
         const timestamp = this.getDatabaseTimestamp();
-        let overlaps: Map<string, [string, number][]> = await Main.overlaps.calculateOverlaps();
-        for await (const channel of overlaps.keys()) {
-            await this.flushChannel(channel, overlaps.get(channel), Main.currentTotalChatters.get(channel), timestamp);
+        try {
+            let overlaps: Map<string, [string, number][]> = await Main.overlaps.calculateOverlaps();
+            for await (const channel of overlaps.keys()) {
+                await this.flushChannel(channel, overlaps.get(channel), Main.currentTotalChatters.get(channel), timestamp);
+            }
+        } catch (err) {
+            this.log.error(`Error occured while flushing overlaps to database: ${err}.`);
+            throw Error(err);
         }
+
+        this.log.debug(`Flushed overlaps to database, performing clean up...`);
 
         // Delete temporary files
         fsExtra.emptyDirSync(OUTPUT_PATH);
         Main.currentTotalChatters.clear();
-
-        //Main.scraper.startCollection();
     }
 
     private async flushChannel(channel: string, overlaps: [string, number][], total_chatters: number, timestamp: string): Promise<void> {
@@ -271,6 +280,7 @@ export class Database {
             await fs.promises.writeFile(output_file, JSON.stringify(writeData));
         } catch (err) {
             this.log.error(`Failed to write chatter data to file: ${err}`);
+            throw Error(err);
         }
         
         Main.currentTotalChatters.set(writeData.channel, writeData.total_chatters);
@@ -290,9 +300,19 @@ export class Database {
         });
     }
 
-    private getDatabaseTimestamp(): string {
+    public async writeNewIteration(iteration: DBIterationEntry): Promise<void> {
+        try {
+            const query = this.pgp.helpers.insert(iteration, this.columnSets.get('_iterations_'));
+            await this.db.none(query);
+        } catch (err) {
+            this.log.error(`Error occured while writing new iteration to database: ${err}.`);
+            throw Error(err);
+        }
+    }
+
+    public getDatabaseTimestamp(): string {
         let now = new Date();
-        now.setMinutes(Math.ceil(now.getMinutes() / 30) * 30);
+        //now.setMinutes(Math.ceil(now.getMinutes() / 30) * 30);
         return now.toISOString().slice(0, 19).replace('T', ' ');
     }
 
