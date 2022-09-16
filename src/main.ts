@@ -63,14 +63,14 @@ export class Main {
         Main.overlaps = new Overlaps();
     
         // Do initial start
-        await Main.updateIteration();
+        await Main.updateIteration(true);
 
         Main.log.info(`Initialized twitch tracker!`);
         Main.start();
     }
 
     public static async start(): Promise<void> {
-        Main.log.info(`Starting collection for iteration ${Main.currentIteration} at ${new Date().getUTCDate()}.`);
+        Main.log.info(`Starting collection for iteration ${Main.currentIteration} with ${Main.iterationsSinceFlush} iterations since flush.`);
         try {
 
             // Fetch top streams and write to database
@@ -96,10 +96,10 @@ export class Main {
         // Update iteration
         try {
             Main.iterationsSinceFlush = Main.iterationsSinceFlush + 1;
-            await Main.updateIteration();
+            await Main.updateIteration(false);
 
             // Check for flush
-            if(Main.iterationsSinceFlush == Config.config.flush_every) {
+            if(Main.iterationsSinceFlush >= Config.config.flush_every) {
                 // Flush overlaps
                 await Main.flush();
             } else {
@@ -149,14 +149,14 @@ export class Main {
         const raw = await fs.promises.readFile(STORE_PATH)
         const data = JSON.parse(raw.toString()) as StoreData;
         Main.currentIteration = data.iteration;
-        Main.iterationsSinceFlush = data.iterations_since_flush || 0;
+        Main.iterationsSinceFlush = data.iterations_since_flush;
         Main.log.debug(`Current iteration on load: ${Main.currentIteration}, iterations since flush:${Main.iterationsSinceFlush}`);
         Main.log.debug(`Read store data file '${STORE_PATH}'.`);
     }
 
     public static async updateStoreData(data: StoreData): Promise<void> {
         Main.currentIteration = data.iteration;
-        Main.currentIteration = data.iterations_since_flush;
+        Main.iterationsSinceFlush = data.iterations_since_flush;
         fs.promises.writeFile(STORE_PATH, JSON.stringify(data)).then(res => resolve())
         .catch(err => {
             Main.log.error(`Failed to write to store data file. ${STORE_PATH}.`);
@@ -164,9 +164,9 @@ export class Main {
         })
     }
 
-    private static async updateIteration(): Promise<void> {
+    private static async updateIteration(initial: boolean): Promise<void> {
         try {
-            Main.currentIteration = Main.currentIteration + 1;
+            Main.currentIteration = (initial ? Main.currentIteration : Main.currentIteration + 1);
             await Main.updateStoreData({
                 iteration: Main.currentIteration,
                 iterations_since_flush: Main.iterationsSinceFlush,
