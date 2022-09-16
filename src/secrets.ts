@@ -1,5 +1,5 @@
 import { ISettingsParam, Logger } from "tslog";
-import { TSLOG_OPTIONS } from "./main";
+import { TSLOG_OPTIONS, Main } from "./main";
 import { exit } from 'process';
 import * as fs from 'fs';
 import axios from 'axios';
@@ -18,8 +18,7 @@ export class Secrets {
 
     private secrets: APISecrets;
 
-    constructor() {
-    }
+    constructor() {}
 
     public async init(): Promise<void> {
         if(!fs.existsSync(SECRETS_PATH)) {

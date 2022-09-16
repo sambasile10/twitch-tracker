@@ -5,9 +5,6 @@ import { ISettingsParam, Logger } from 'tslog';
 import { ChattersData } from './database';
 import { Main, TSLOG_OPTIONS } from './main';
 
-// Fetch data for each channel every x seconds
-const FETCH_CHANNEL_INTERVAL: number = (Number(process.env.FETCH_INTERVAL) || 30);
-
 export class Scraper {
 
     private log: Logger = new Logger({ name: 'Scraper', ...TSLOG_OPTIONS } as ISettingsParam);
@@ -41,11 +38,11 @@ export class Scraper {
 
     public startCollection(channels: string[]): void {
         const num_channels: number = channels.length;
-        const interval: number = (FETCH_CHANNEL_INTERVAL / num_channels) * 1000;
+        const interval: number = (Config.config.fetch_interval / num_channels) * 1000;
         this.queue = new Queue<string>(...channels);
         this.log.info(`Queue length is ${this.queue.length}`);
 
-        this.log.info(`Fetching data for ${num_channels} channels every ${FETCH_CHANNEL_INTERVAL} seconds. Interval of ${interval} ms.`);
+        this.log.info(`Fetching data for ${num_channels} channels every ${Config.config.fetch_interval} seconds. Interval of ${interval} ms.`);
         this.collectionRunner = setInterval(() => {
             if(this.queue.length === 0) {
                 // Queue is empty

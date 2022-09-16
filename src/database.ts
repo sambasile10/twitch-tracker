@@ -130,8 +130,8 @@ export class Database {
 
         // Load users from users database into map to avoid conflicts
         const loaded_channels: string[] = await this.db.any(`SELECT channel_name FROM users;`);
-        this.registeredUsers = loaded_channels;
-        this.log.debug(`Loaded ${loaded_channels.length} users from users table into memory.`);
+        this.registeredUsers = loaded_channels.map(channel_res => (channel_res as any).channel_name);
+        this.log.debug(`Loaded ${this.registeredUsers.length} users from users table into memory.`);
 
         // Clear temp folder
         fsExtra.emptyDirSync(OUTPUT_PATH);
@@ -177,7 +177,8 @@ export class Database {
                 resolve();
             }).catch(err => {
                 this.log.error(`Failed to flush iteration info entries to database. Error: ${err}.`);
-                reject(err);
+                //reject(err);
+                resolve(); // Don't reject on duplicate key
             });
         });
     }
@@ -310,7 +311,7 @@ export class Database {
             await this.db.none(query);
         } catch (err) {
             this.log.error(`Error occured while writing new iteration to database: ${err}.`);
-            throw Error(err);
+            //throw Error(err); DONT Reject on failure due to duplicate key
         }
     }
 

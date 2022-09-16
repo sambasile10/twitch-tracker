@@ -5,7 +5,7 @@ import { Database, DBStreamInfoEntry } from "./database";
 import { Overlaps } from "./overlaps";
 import { Scraper } from "./scraper";
 import * as fs from "fs";
-import { ISettingsParam, Logger } from "tslog";
+import { ILogObject, ISettingsParam, Logger } from "tslog";
 import { reject } from "lodash";
 import { resolve } from "path";
 
@@ -18,9 +18,11 @@ export { TSLOG_OPTIONS };
 
 declare interface StoreData {
     iteration: number,
+    iterations_since_flush: number,
 };
 
-const STORE_PATH = process.env.STORE_PATH || String(__dirname+'/config/data.json');
+const STORE_PATH = process.env.STORE_PATH || String('/usr/share/tracker/config/data.json');
+const LOG_PATH = process.env.LOG_PATH || String('/usr/share/tracker/config/logs.txt');
 
 export class Main {
 
@@ -68,7 +70,7 @@ export class Main {
     }
 
     public static async start(): Promise<void> {
-        Main.log.info(`Starting collection for iteration ${Main.currentIteration}.`);
+        Main.log.info(`Starting collection for iteration ${Main.currentIteration} at ${new Date().getUTCDate()}.`);
         try {
 
             // Fetch top streams and write to database
@@ -93,10 +95,10 @@ export class Main {
 
         // Update iteration
         try {
+            Main.iterationsSinceFlush = Main.iterationsSinceFlush + 1;
             await Main.updateIteration();
 
             // Check for flush
-            Main.iterationsSinceFlush++;
             if(Main.iterationsSinceFlush == Config.config.flush_every) {
                 // Flush overlaps
                 await Main.flush();
@@ -147,12 +149,14 @@ export class Main {
         const raw = await fs.promises.readFile(STORE_PATH)
         const data = JSON.parse(raw.toString()) as StoreData;
         Main.currentIteration = data.iteration;
-        Main.log.debug(`Current iteration on load: ${Main.currentIteration}`);
+        Main.iterationsSinceFlush = data.iterations_since_flush || 0;
+        Main.log.debug(`Current iteration on load: ${Main.currentIteration}, iterations since flush:${Main.iterationsSinceFlush}`);
         Main.log.debug(`Read store data file '${STORE_PATH}'.`);
     }
 
     public static async updateStoreData(data: StoreData): Promise<void> {
         Main.currentIteration = data.iteration;
+        Main.currentIteration = data.iterations_since_flush;
         fs.promises.writeFile(STORE_PATH, JSON.stringify(data)).then(res => resolve())
         .catch(err => {
             Main.log.error(`Failed to write to store data file. ${STORE_PATH}.`);
@@ -165,6 +169,7 @@ export class Main {
             Main.currentIteration = Main.currentIteration + 1;
             await Main.updateStoreData({
                 iteration: Main.currentIteration,
+                iterations_since_flush: Main.iterationsSinceFlush,
             } as StoreData);
 
             const timestamp = Main.database.getDatabaseTimestamp(); // change this?
@@ -178,6 +183,17 @@ export class Main {
             Main.log.error(`Error occured while updating iteration: ${err}.`);
             Main.handleFatalError(err);
         }
+    }
+
+    public static async logToFile(logObject: ILogObject): Promise<void> {
+        return new Promise<void>((resolve) => {
+            fs.promises.appendFile(LOG_PATH, `${logObject.date.toISOString()} | ${logObject.logLevel} | ${logObject.fileName}: ${logObject.argumentsArray[0]}` + "\n")
+            .then(res => resolve())
+            .catch(err => {
+                console.log(`Error occured while logging to file: ${err}`);
+                resolve();
+            });
+        })
     }
 
 }

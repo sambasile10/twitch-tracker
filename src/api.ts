@@ -15,9 +15,7 @@ export class TwitchAPI {
     //private twitch: TwitchApi;
     private secrets: Secrets;
 
-    constuctor() {
-        //this.init();
-    }
+    constuctor() {}
 
     public async init(): Promise<void> {
         this.secrets = new Secrets();
@@ -83,10 +81,7 @@ export class TwitchAPI {
         const max: number = Math.ceil(Config.config.search_depth / 100);
         this.log.debug(`Starting fetch of data max=${max}`);
         for (let i = 0; i < max; i++) {
-            if(pagination_token == "" && i > 0) { // return streams;
-                let testing_only = streams.slice(0, 12);
-                return testing_only;
-            }; // TODO: REMOVE SLICE TESTING ONLY!!!!!
+            if(pagination_token == "" && i > 0) return (process.env.DEV_MODE ? streams.slice(0, 12) : streams);
 
             // Build API URL
             let url_parts = [ "https://api.twitch.tv/helix/streams?first=100", `&language=${'en'}` ];
@@ -128,7 +123,7 @@ export class TwitchAPI {
             }
         }
 
-        return streams.slice(0, 12); // TODO: CHANGE ME
+        return (process.env.DEV_MODE ? streams.slice(0, 12) : streams);
     }
 
     public async storeUsersFromFetch(users: DBStreamInfoEntry[]): Promise<void> {

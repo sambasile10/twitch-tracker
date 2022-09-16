@@ -1,12 +1,13 @@
 import * as fs from "fs";
 import { exit } from "process";
 import { ISettingsParam, Logger } from "tslog";
-import { TSLOG_OPTIONS } from "./main";
+import { TSLOG_OPTIONS, Main } from "./main";
 
 export declare interface ConfigData {
     languages: string, // Ignored for now
     search_depth: number, // Number of channels to search in top streams (must be divisible by 100)
     flush_every: number, // Flushes overlaps every x iterations (12 iterations = 6 hours)
+    fetch_interval: number, // Interval for fetching channels (ex: 1800 = fetch channels every 30 minutes)
 }
 
 const CONFIG_PATH = process.env.CONFIG_PATH || String(__dirname+'/config/config.json');

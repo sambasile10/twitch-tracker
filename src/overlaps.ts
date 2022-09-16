@@ -10,9 +10,7 @@ const OUTPUT_PATH: string = process.env.OUTPUT_PATH || '/usr/share/tracker/chatt
 
 export class Overlaps {
 
-    constructor() {
-
-    }
+    constructor() {}
 
     private log: Logger = new Logger({ name: 'Database', ...TSLOG_OPTIONS } as ISettingsParam);
 
