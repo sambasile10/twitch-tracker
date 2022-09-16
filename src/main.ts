@@ -95,16 +95,18 @@ export class Main {
 
         // Update iteration
         try {
-            Main.iterationsSinceFlush = Main.iterationsSinceFlush + 1;
-            await Main.updateIteration(false);
-
-            // Check for flush
-            if(Main.iterationsSinceFlush >= Config.config.flush_every) {
-                // Flush overlaps
+            if(Main.iterationsSinceFlush+1 >= Config.config.flush_every) {
+                // This iteration should be flushed
+                Main.currentIteration = Main.currentIteration + 1;
                 await Main.flush();
+                await Main.updateIteration(true, 0); // Force iterations since flush to be zero, without updating iteration count
+                Main.iterationsSinceFlush = 0; // Just to be sure...
+                Main.start(); // Finally, restart data collection
             } else {
-                // Restart collection cycle
-                Main.start();
+                // Do not flush this iteration, continue normally
+                Main.iterationsSinceFlush = Main.iterationsSinceFlush + 1; // Update flush count
+                await Main.updateIteration(false); // Advance iteration normally
+                Main.start(); // Restart data collection
             }
         } catch (err) {
             Main.log.error(`Error occured while updating iteration: ${err}.`);
@@ -125,9 +127,8 @@ export class Main {
 
         Main.log.info(`Successfully flushed overlaps!`);
 
-        // Reset iterationsSinceFlush and restart data collection
+        // Reset iterationsSinceFlush
         Main.iterationsSinceFlush = 0;
-        Main.start();
     }
 
     private static handleFatalError(err: any): void {
@@ -164,12 +165,12 @@ export class Main {
         })
     }
 
-    private static async updateIteration(initial: boolean): Promise<void> {
+    private static async updateIteration(initial: boolean, newInterationsSinceFlush?: number): Promise<void> {
         try {
-            Main.currentIteration = (initial ? Main.currentIteration : Main.currentIteration + 1);
+            Main.currentIteration = (initial || newInterationsSinceFlush ? Main.currentIteration : Main.currentIteration + 1);
             await Main.updateStoreData({
                 iteration: Main.currentIteration,
-                iterations_since_flush: Main.iterationsSinceFlush,
+                iterations_since_flush: (newInterationsSinceFlush ? newInterationsSinceFlush : Main.iterationsSinceFlush),
             } as StoreData);
 
             const timestamp = Main.database.getDatabaseTimestamp(); // change this?

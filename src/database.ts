@@ -233,7 +233,7 @@ export class Database {
                 entries.push(entry);
             }
 
-            const query = this.pgp.helpers.insert(entries, this.columnSets.get(channel.toLowerCase()));
+            const query = this.pgp.helpers.insert(entries, this.columnSets.get(this.getTableName(channel)));
             this.db.none(query).then(res => {
                 resolve();
             }).catch(err => {
@@ -245,7 +245,13 @@ export class Database {
 
     async addChannel(channel: string): Promise<void> {
         return new Promise<void>((resolve, reject) => {
-            const table_name: string = channel.toLowerCase();
+            if(channel == undefined) {
+                // Safety check for out of sync calls to flush 
+                this.log.debug(`Channel name to add channel for was undefined? The scraper is likely erroneously calling to flush.`)
+                resolve();
+            }
+
+            const table_name: string = this.getTableName(channel); // Ensures table name is Postgres legal
             this.db.createChannel(table_name).then(res => {
                 let column: pgPromise.ColumnSet = new this.pgp.helpers.ColumnSet(['iteration', 'channel_name', 'overlap_count', 'total_chatters'], { table: table_name });
                 this.columnSets.set(table_name, column);
@@ -312,6 +318,15 @@ export class Database {
         } catch (err) {
             this.log.error(`Error occured while writing new iteration to database: ${err}.`);
             //throw Error(err); DONT Reject on failure due to duplicate key
+        }
+    }
+
+    private getTableName(channel: string) {
+        if(/^\d/.test(channel)) {
+            // Channel name begins with an number, prepend an underscore as number first is illegal in Postgres
+            return `_${channel.toLowerCase()}`;
+        } else {
+            return channel.toLowerCase();
         }
     }
 
